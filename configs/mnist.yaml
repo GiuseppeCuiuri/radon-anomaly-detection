@@ -1,0 +1,57 @@
+# MNIST one-vs-rest protocol.
+#
+# Usage:
+#   python -m radon.cli.train --config configs/mnist.yaml
+#
+# Values reproduce the experiment from the original notebook: digit 4 is normal,
+# the training set carries 265 contaminating samples drawn from digits 0, 2 and 3.
+
+data:
+  dataset: mnist
+  batch_size: 256
+
+  mnist:
+    normal_digit: 4
+
+    # Training split: 4859 inliers + 265 outliers -> contamination 5.17%.
+    n_normal: 4859
+    n_anomaly: 265
+    anomaly_digits: [0, 2, 3]
+
+    # Test split. null means "keep every sample of that class".
+    #
+    # Note the resulting split is NOT balanced: MNIST's test set holds 982
+    # images of digit 4, so keeping all inliers and capping outliers at 265
+    # gives roughly 79% / 21%. The AUPRC baseline moves with this ratio, so it
+    # must be reported alongside the metric.
+    n_test_normal: null
+    n_test_anomaly: 265
+
+    # Geometry used only to reshape flattened vectors back for visualisation.
+    image_shape: [28, 28]
+
+    download: true
+
+# input_dim = 784, which the original rule mapped to (256, 128).
+model:
+  hidden_dim: 256
+  latent_dim: 128
+
+training:
+  epochs: 200
+  warmup_epochs: 50
+  projection_every_warmup: 25
+  projection_every_nl: 50
+  lambda_s: 1.0
+
+  early_stopping:
+    patience: 2
+
+  curriculum:
+    start: 0.20
+    end: 1.00
+    min_s: 100
+
+  consistency:
+    weight: 0.0
+    sigma: 0.02

@@ -1,0 +1,20 @@
+name: RADON
+channels:
+  - pytorch
+  - nvidia
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.12
+  - ipykernel
+  - matplotlib
+  - numpy
+  - pandas
+  - pip
+  - pytorch
+  - pytorch-lightning
+  - scikit-learn
+  - scipy
+  - pip:
+    - thresholdmodeling==0.0.1
+

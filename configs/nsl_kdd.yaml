@@ -1,0 +1,51 @@
+# NSL-KDD protocol.
+#
+# Usage:
+#   python -m radon.cli.train --config configs/nsl_kdd.yaml
+#
+# Expects four pre-processed CSV files in <data_dir>/NSL_KDD/:
+#   X_train, Y_train, X_test, Y_test
+# Features must already be scaled to [0, 1] with categorical columns one-hot
+# encoded; labels are 0 for normal traffic and 1 for an attack.
+
+data:
+  dataset: nsl_kdd
+  batch_size: 256
+
+  nsl_kdd:
+    # All inliers are kept; outliers are subsampled to n = c * n_in / (1 - c).
+    target_contamination: 0.05
+
+    # The decoder ends in a sigmoid, so features outside [0, 1] can never be
+    # reconstructed and would inflate their own anomaly score. The original
+    # notebook applied this clamp by hand in a cell; it belongs to the dataset.
+    clamp_test_to_unit_range: true
+
+    # Prefix identifying a stray pandas index column to drop on load.
+    index_column_prefix: Unnamed
+
+# input_dim = 122, which the original rule (<= 200) mapped to (64, 32).
+model:
+  hidden_dim: 64
+  latent_dim: 32
+
+training:
+  epochs: 200
+  warmup_epochs: 50
+  projection_every_warmup: 25
+  projection_every_nl: 50
+  lambda_s: 1.0
+
+  early_stopping:
+    patience: 2
+
+  # Tuned for target_contamination <= 0.05. At higher contamination the original
+  # notebook used start: 0.10, end: 0.60, min_s: 1000.
+  curriculum:
+    start: 0.05
+    end: 0.40
+    min_s: 500
+
+  consistency:
+    weight: 0.0
+    sigma: 0.005

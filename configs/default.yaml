@@ -1,0 +1,107 @@
+# Base configuration layer.
+#
+# Loaded first for every run; a dataset-specific file (configs/mnist.yaml,
+# configs/nsl_kdd.yaml) is merged on top, then any --set overrides from the CLI.
+#
+# Sections for the model, the trainer and evaluation are added in later steps of
+# the refactor; unknown keys are rejected on load, so nothing can be declared
+# here before the code that consumes it exists.
+
+seed: 42
+
+# auto -> CUDA when available, otherwise CPU.
+# An explicit "cuda" that cannot be satisfied is an error, not a silent
+# downgrade to CPU.
+device: auto
+
+# Deterministic cuDNN kernels: slower, but reproducible on GPU.
+deterministic: true
+
+paths:
+  # Relative paths resolve against the repository root, so runs behave the same
+  # regardless of the working directory they are launched from.
+  data_dir: data
+  output_dir: outputs
+
+logging:
+  level: INFO
+  file: radon.log
+  format: "%(asctime)s | %(levelname)-8s | %(name)-28s | %(message)s"
+  date_format: "%H:%M:%S"
+
+data:
+  dataset: mnist
+  batch_size: 256
+
+# Symmetric autoencoder: input_dim -> hidden_dim -> latent_dim -> hidden_dim -> input_dim.
+# input_dim comes from the dataset. The original code chose these inline with
+# "(256, 128) if input_dim > 200 else (64, 32)"; each dataset config now states
+# its own values, so a run's capacity is visible rather than implied.
+model:
+  hidden_dim: 256
+  latent_dim: 128
+
+training:
+  epochs: 200
+  batch_size: 256
+  lr: 0.001
+
+  # Epochs of plain reconstruction before negative learning takes over.
+  warmup_epochs: 50
+
+  # Histogram estimator for the projection step: "knuth", or any NumPy
+  # estimator name such as "fd", "sturges", "auto".
+  bin_estimator: knuth
+
+  # Projection intervals. One is always forced at the last warm-up epoch, so
+  # negative learning starts from a fresh partition.
+  projection_every_warmup: 25
+  projection_every_nl: 50
+
+  # Base weight of the negative-learning loss, rescaled by |L|/|S| compressed
+  # through lambda_card_mode ("linear", "sqrt" or "log").
+  lambda_s: 1.0
+  lambda_card_mode: sqrt
+
+  curriculum:
+    enabled: true
+    start: 0.10
+    end: 1.00
+    min_s: 200
+
+  ramp:
+    enabled: true
+    epochs: 50
+
+  consistency:
+    weight: 0.0    # 0 disables the term; every original configuration used 0
+    sigma: 0.02
+
+  early_stopping:
+    enabled: true
+    patience: 3
+    min_delta: 1.0e-6
+    # frozen_l0 measures on the inlier set captured when negative learning
+    # begins, so the value is comparable across projections. current_l is the
+    # original behaviour and is not. See the README.
+    metric: frozen_l0
+
+  # EMA factors that were magic numbers inside the original projection routine.
+  smoothing:
+    threshold_s: 0.90
+    cardinality: 0.90
+    lambda_card: 0.90
+    lambda_eff: 0.90
+
+# Opt-in switches restoring pre-refactor behaviour. Set all three to true to
+# reproduce the original published numbers bit-for-bit.
+compat:
+  # Original warm-up loader used shuffle=False, freezing batch order and the
+  # L/S pairing for every epoch.
+  legacy_warmup_no_shuffle: false
+  # Original AUPRC used auc(recall, precision); trapezoidal interpolation of a
+  # precision-recall curve is optimistically biased.
+  legacy_auprc_trapezoid: false
+  # Original early stopping scored the inlier loss over the current L, which is
+  # rebuilt at every projection and so is not comparable across projections.
+  legacy_early_stop_metric: false

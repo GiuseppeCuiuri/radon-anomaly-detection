@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+
+# Tooling
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.claude/
+
+# IDE
+.idea/
+.vscode/
+
+# Notebooks
+.ipynb_checkpoints/
+
+# Run artefacts
+outputs/
+*.pth
+*.pt
+
+# Datasets. The leading slash anchors this to the repository root: a bare
+# "data/" would also match src/radon/data/, silently excluding the data-loading
+# package from every commit.
+#
+# NOTE: /data/ was already committed in this repository's history, so this rule
+# only prevents *new* dataset files from being added; it does not untrack the
+# existing ones. Consider `git rm --cached -r data/` before publishing: MNIST
+# and NSL-KDD are both freely downloadable and add ~50 MB to every clone.
+/data/
+
+# Unrelated study material that happens to live in this folder
+foto_cv.jpg
+u-net-architecture.png
+what-is-efficientnet-a-quick-overview.htm
+1_ExIkm6cImpPgpetFW1kwyQ.png
