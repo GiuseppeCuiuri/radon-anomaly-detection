@@ -1,5 +1,7 @@
 # RADON — Robust Autoencoder for Unsupervised Anomaly Detection
 
+[![CI](https://github.com/GiuseppeCuiuri/radon-anomaly-detection/actions/workflows/ci.yml/badge.svg)](https://github.com/GiuseppeCuiuri/radon-anomaly-detection/actions/workflows/ci.yml)
+
 An autoencoder trained to reconstruct inliers while a *negative learning* objective pushes
 suspected outliers towards their feature-wise inverse, so anomalies end up badly reconstructed
 on purpose. Periodic **projection** steps re-partition the training set by thresholding the
