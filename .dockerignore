@@ -1,0 +1,8 @@
+# Send only what the image needs.
+*
+!pyproject.toml
+!README.md
+!src/
+!configs/
+**/__pycache__/
+**/*.egg-info/
