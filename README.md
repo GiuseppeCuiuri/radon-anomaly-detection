@@ -55,6 +55,27 @@ python -m radon.cli.explain --config configs/nsl_kdd.yaml
 `notebooks/01_radon_demo.ipynb` walks the same pipeline interactively. It contains no logic of
 its own — it calls the package.
 
+## Docker
+
+A CPU image with the package and the configs. Datasets and results stay on the host, mounted
+into `/app/data` and `/app/outputs`:
+
+```bash
+docker build -t radon:cpu .
+
+# One epoch on MNIST: downloads into ./data, writes everything to ./outputs
+docker run --rm -v "$(pwd)/data:/app/data" -v "$(pwd)/outputs:/app/outputs" \
+    radon:cpu --config configs/mnist.yaml --set training.epochs=1 --set training.warmup_epochs=1
+
+# The explain command
+docker run --rm -v "$(pwd)/data:/app/data" -v "$(pwd)/outputs:/app/outputs" \
+    --entrypoint python radon:cpu -m radon.cli.explain --config configs/mnist.yaml
+```
+
+In PowerShell, write `${PWD}` instead of `$(pwd)` and keep each command on one line. Without
+arguments the image prints the `radon-train` help. The container runs as an unprivileged user
+(uid 1000), so on Linux the mounted folders must be writable by that user.
+
 ## Configuration
 
 Three layers, each overriding the previous: `configs/default.yaml`, then a dataset file, then
