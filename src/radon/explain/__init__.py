@@ -6,7 +6,10 @@ from radon.explain.nsl_kdd import (
     NumericAttribution,
     SampleExplanation,
     build_inlier_profile,
+    explain_record,
     explain_samples,
+    profile_from_dict,
+    profile_to_dict,
 )
 
 __all__ = [
@@ -15,5 +18,8 @@ __all__ = [
     "NumericAttribution",
     "SampleExplanation",
     "build_inlier_profile",
+    "explain_record",
     "explain_samples",
+    "profile_from_dict",
+    "profile_to_dict",
 ]
