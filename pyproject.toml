@@ -35,8 +35,12 @@ dev = [
     # Type stubs, so `mypy` runs clean without a separate --install-types step.
     "types-PyYAML>=6.0",
     "pandas-stubs>=2.0",
+    # The service is tested and type-checked with the rest, so dev pulls it in.
+    "radon-ad[service]",
+    "httpx>=0.27",
 ]
 notebook = ["ipykernel>=6.29", "jupyterlab>=4.0"]
+service = ["fastapi>=0.110", "uvicorn>=0.29"]
 
 [project.scripts]
 radon-train = "radon.cli.train:main"
