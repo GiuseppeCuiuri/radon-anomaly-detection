@@ -265,4 +265,4 @@ reference release is in [`legacy/reference/`](legacy/reference/); background pap
 
 ## License
 
-MIT.
+MIT, see [LICENSE](LICENSE).
