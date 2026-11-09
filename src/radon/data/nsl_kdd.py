@@ -132,7 +132,8 @@ class NslKddBuilder(DatasetBuilder):
         first = str(df.columns[0])
         if first.startswith(self.cfg.index_column_prefix):
             logger.debug("Dropping stray index column '%s'.", first)
-            return df.drop(columns=[df.columns[0]])
+            trimmed: pd.DataFrame = df.drop(columns=[df.columns[0]])
+            return trimmed
         return df
 
     @staticmethod
