@@ -81,7 +81,7 @@ class ScoredSplit:
         outliers = self.scores[self.labels == 1]
         summary = (
             f"{self.n_samples} samples, anomaly rate {self.anomaly_rate:.4f} | "
-            f"score in [{self.scores.min():.4f}, {self.scores.max():.4f}]"
+            f"score in [{np.min(self.scores):.4f}, {np.max(self.scores):.4f}]"
         )
 
         if inliers.size == 0 or outliers.size == 0:
