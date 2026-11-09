@@ -18,8 +18,9 @@ device: auto
 deterministic: true
 
 paths:
-  # Relative paths resolve against the repository root, so runs behave the same
-  # regardless of the working directory they are launched from.
+  # Relative paths resolve against the repository root in a source checkout, so runs
+  # behave the same from any working directory; an installed package uses the
+  # working directory instead.
   data_dir: data
   output_dir: outputs
 
