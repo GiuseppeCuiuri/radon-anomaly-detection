@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import logging
 import sys
+from typing import Any
 
 import torch
 
@@ -18,6 +19,7 @@ from radon.config import Config
 from radon.data import AnomalyDataset, build_dataset, build_test_loader
 from radon.evaluation import EvaluationResult, aggregate_metrics, evaluate_split, score_split
 from radon.exceptions import RadonError
+from radon.explain import build_inlier_profile, profile_to_dict
 from radon.models import build_model, save_checkpoint
 from radon.training import RadonTrainer, TrainingHistory
 
@@ -85,11 +87,31 @@ def run_repetition(
             "threshold_outlier": threshold_outlier,
             "best_epoch": history.best_epoch or -1,
             "dataset": dataset.name,
+            **inlier_profile_extra(dataset),
         },
     )
     history.write_csv(cfg.paths.report_dir, f"{dataset.name}_rep{repetition}")
 
     return history, result
+
+
+def inlier_profile_extra(dataset: AnomalyDataset) -> dict[str, Any]:
+    """Checkpoint payload that lets the inference service explain records.
+
+    Feature attribution needs the inlier profile of the training data. Storing
+    it in the checkpoint keeps the service independent of the dataset files.
+
+    Args:
+        dataset: The dataset the model was trained on.
+
+    Returns:
+        ``{"inlier_profile": ...}`` for a tabular dataset, an empty dict for an
+        image dataset, which has no per-feature attribution.
+    """
+    if dataset.feature_names is None:
+        return {}
+    profile = build_inlier_profile(dataset.x_train, dataset.y_train, dataset.feature_names)
+    return {"inlier_profile": profile_to_dict(profile)}
 
 
 def write_figures(

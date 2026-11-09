@@ -76,6 +76,42 @@ In PowerShell, write `${PWD}` instead of `$(pwd)` and keep each command on one l
 arguments the image prints the `radon-train` help. The container runs as an unprivileged user
 (uid 1000), so on Linux the mounted folders must be writable by that user.
 
+## Inference service
+
+An optional HTTP service that serves one trained checkpoint:
+
+```bash
+pip install -e ".[service]"
+RADON_CHECKPOINT=outputs/checkpoints/radon_nsl_kdd_rep0.pth \
+    uvicorn radon.service.app:create_app --factory --port 8000
+```
+
+| Endpoint | Body | Returns |
+| --- | --- | --- |
+| `GET /health` | | the served architecture, the device, whether `/explain` is available |
+| `POST /score` | `{"records": [[...], ...]}` | one anomaly score per record, `1 - cos(f(x), x)`: higher is more anomalous |
+| `POST /explain` | `{"record": [...]}` | the per-feature attribution of one record (tabular checkpoints only) |
+
+Records must be preprocessed like the training data: `input_dim` values, each in `[0, 1]`.
+Wrong lengths, NaN or out-of-range values return 422, and batches above `RADON_MAX_BATCH_SIZE`
+(default 1024) return 413. The service returns scores, not anomaly/normal labels, because the
+projection threshold is a poor decision threshold (see [Known caveats](#known-caveats)). If
+`RADON_SCORE_THRESHOLD` is set, responses also say which scores exceed it and label it as an
+operator choice. `RADON_DEVICE` selects the torch device (default `cpu`). Requests are logged
+with method, path, status and duration, never with feature values.
+
+`/explain` compares a record with the inlier profile of the training data, which `radon-train`
+stores in checkpoints of tabular datasets. MNIST checkpoints, and tabular ones written by an
+older version, answer 409.
+
+In Docker:
+
+```bash
+docker build --target service -t radon:service .
+docker run --rm -p 8000:8000 -v "$(pwd)/outputs:/app/outputs" \
+    -e RADON_CHECKPOINT=outputs/checkpoints/radon_mnist_rep0.pth radon:service
+```
+
 ## Configuration
 
 Three layers, each overriding the previous: `configs/default.yaml`, then a dataset file, then

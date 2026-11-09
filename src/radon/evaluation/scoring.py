@@ -19,9 +19,25 @@ from torch.utils.data import DataLoader
 
 from radon.models.autoencoder import RadonAutoencoder
 
-__all__ = ["ScoredSplit", "score_split"]
+__all__ = ["ScoredSplit", "anomaly_scores", "score_split"]
 
 logger = logging.getLogger(__name__)
+
+
+def anomaly_scores(model: RadonAutoencoder, features: torch.Tensor) -> torch.Tensor:
+    """Anomaly score of each row: ``1 - cos(f(x), x)``.
+
+    Args:
+        model: The trained model.
+        features: Batch of shape ``(N, input_dim)``, on the model's device.
+
+    Returns:
+        One score per row, shape ``(N,)``. Gradients follow the caller's
+        context, so wrap the call in ``torch.no_grad()`` for inference.
+    """
+    criterion = nn.CosineSimilarity(dim=1, eps=1e-5)
+    scores: torch.Tensor = 1.0 - criterion(model(features), features)
+    return scores
 
 
 @dataclass(frozen=True)
@@ -121,7 +137,6 @@ def score_split(
     """
     model.eval()
     model.to(device)
-    criterion = nn.CosineSimilarity(dim=1, eps=1e-5)
 
     # Accumulate whole arrays rather than per-sample Python floats: the original
     # extended a list with one NumPy scalar per sample, allocating an object for
@@ -131,8 +146,7 @@ def score_split(
 
     for features, labels in loader:
         features = features.to(device).float()
-        reconstruction = model(features)
-        batch_scores = 1.0 - criterion(reconstruction, features)
+        batch_scores = anomaly_scores(model, features)
 
         score_batches.append(batch_scores.detach().cpu().numpy())
         label_batches.append(labels.detach().cpu().numpy())

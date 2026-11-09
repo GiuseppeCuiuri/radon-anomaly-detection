@@ -7,9 +7,16 @@ import pytest
 torch = pytest.importorskip("torch")
 
 from radon.data.loaders import build_eval_loader  # noqa: E402
+from radon.evaluation.scoring import anomaly_scores  # noqa: E402
 from radon.exceptions import RadonError  # noqa: E402
-from radon.explain import build_inlier_profile, explain_samples  # noqa: E402
-from radon.models import RadonAutoencoder  # noqa: E402
+from radon.explain import (  # noqa: E402
+    build_inlier_profile,
+    explain_record,
+    explain_samples,
+    profile_from_dict,
+    profile_to_dict,
+)
+from radon.models import RadonAutoencoder, load_checkpoint, save_checkpoint  # noqa: E402
 
 DEVICE = torch.device("cpu")
 
@@ -200,3 +207,73 @@ class TestExplainSamples:
 
         with pytest.raises(RadonError, match="no outliers"):
             explain_samples(model, loader, profile, DEVICE)
+
+
+class TestProfileStorage:
+    def test_round_trip_through_a_dict(self, training_data) -> None:
+        x, y = training_data
+        profile = build_inlier_profile(x, y, FEATURE_NAMES)
+        restored = profile_from_dict(profile_to_dict(profile))
+
+        assert torch.equal(restored.quantile_low, profile.quantile_low)
+        assert torch.equal(restored.quantile_high, profile.quantile_high)
+        assert restored.onehot_groups == profile.onehot_groups
+        assert restored.group_modes == profile.group_modes
+        assert restored.numeric_indices == profile.numeric_indices
+        assert restored.feature_names == profile.feature_names
+
+    def test_round_trip_through_a_checkpoint(self, training_data, model, tmp_path) -> None:
+        # Checkpoints load with weights_only=True, which refuses arbitrary objects.
+        x, y = training_data
+        profile = build_inlier_profile(x, y, FEATURE_NAMES)
+        path = save_checkpoint(
+            model, tmp_path / "model.pth", extra={"inlier_profile": profile_to_dict(profile)}
+        )
+
+        restored = profile_from_dict(load_checkpoint(path).extra["inlier_profile"])
+        assert restored.feature_names == profile.feature_names
+        assert torch.equal(restored.quantile_high, profile.quantile_high)
+
+    def test_missing_field_raises(self, training_data) -> None:
+        x, y = training_data
+        stored = profile_to_dict(build_inlier_profile(x, y, FEATURE_NAMES))
+        del stored["group_modes"]
+        with pytest.raises(RadonError, match="Malformed inlier profile"):
+            profile_from_dict(stored)
+
+    def test_quantile_width_mismatch_raises(self, training_data) -> None:
+        x, y = training_data
+        stored = profile_to_dict(build_inlier_profile(x, y, FEATURE_NAMES))
+        stored["quantile_low"] = stored["quantile_low"][:-1]
+        with pytest.raises(RadonError, match="quantile_low"):
+            profile_from_dict(stored)
+
+
+class TestExplainRecord:
+    def test_score_matches_the_scoring_function(self, training_data, model) -> None:
+        x, y = training_data
+        profile = build_inlier_profile(x, y, FEATURE_NAMES)
+        record = x[-1]
+
+        explanation = explain_record(model, record, profile, DEVICE)
+
+        with torch.no_grad():
+            expected = float(anomaly_scores(model, record.reshape(1, -1))[0])
+        assert explanation.score == pytest.approx(expected)
+        assert explanation.label is None
+
+    def test_outlier_categoricals_are_attributed(self, training_data, model) -> None:
+        x, y = training_data
+        profile = build_inlier_profile(x, y, FEATURE_NAMES)
+
+        explanation = explain_record(model, x[-1], profile, DEVICE, min_abs_delta=0.0)
+
+        groups = {a.group for a in explanation.categorical}
+        assert groups == {"protocol_type", "flag"}
+        assert all(a.mismatch for a in explanation.categorical)
+
+    def test_width_mismatch_raises(self, training_data, model) -> None:
+        x, y = training_data
+        profile = build_inlier_profile(x, y, FEATURE_NAMES)
+        with pytest.raises(RadonError, match="7 feature"):
+            explain_record(model, x[0, :7], profile, DEVICE)

@@ -20,8 +20,9 @@ attribution impossible to test, export or aggregate.
 from __future__ import annotations
 
 import logging
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from typing import Any
 
 import numpy as np
 import torch
@@ -39,7 +40,10 @@ __all__ = [
     "NumericAttribution",
     "SampleExplanation",
     "build_inlier_profile",
+    "explain_record",
     "explain_samples",
+    "profile_from_dict",
+    "profile_to_dict",
 ]
 
 logger = logging.getLogger(__name__)
@@ -135,7 +139,8 @@ class SampleExplanation:
     Attributes:
         tag: How the sample was selected, e.g. ``top anomaly``.
         score: Its anomaly score.
-        label: Ground truth, 1 for an outlier.
+        label: Ground truth, 1 for an outlier; ``None`` when it is unknown, as
+            for a record sent to the inference service.
         categorical: Categorical attributions, most incriminating first.
         numeric_causal: Numeric attributions ranked by ``delta_score``.
         numeric_violations: Numeric features ranked by reconstruction error.
@@ -143,7 +148,7 @@ class SampleExplanation:
 
     tag: str
     score: float
-    label: int
+    label: int | None
     categorical: tuple[CategoricalAttribution, ...]
     numeric_causal: tuple[NumericAttribution, ...]
     numeric_violations: tuple[NumericAttribution, ...]
@@ -247,6 +252,127 @@ def build_inlier_profile(
         group_modes=group_modes,
         numeric_indices=numeric_indices,
         feature_names=tuple(feature_names),
+    )
+
+
+def profile_to_dict(profile: InlierProfile) -> dict[str, Any]:
+    """Plain-data form of a profile, for a checkpoint's ``extra`` slot.
+
+    Only tensors, strings, integers, lists and dicts, which
+    ``torch.load(weights_only=True)`` accepts.
+
+    Args:
+        profile: The profile to store.
+
+    Returns:
+        A dictionary that :func:`profile_from_dict` turns back into the profile.
+    """
+    return {
+        "quantile_low": profile.quantile_low.detach().cpu(),
+        "quantile_high": profile.quantile_high.detach().cpu(),
+        "onehot_groups": {name: list(indices) for name, indices in profile.onehot_groups.items()},
+        "group_modes": dict(profile.group_modes),
+        "numeric_indices": list(profile.numeric_indices),
+        "feature_names": list(profile.feature_names),
+    }
+
+
+def profile_from_dict(data: Mapping[str, Any]) -> InlierProfile:
+    """Rebuild a profile stored by :func:`profile_to_dict`.
+
+    Args:
+        data: The stored dictionary.
+
+    Returns:
+        The profile, with its quantiles on the CPU.
+
+    Raises:
+        RadonError: If a field is missing or malformed, or the quantiles do not
+            have one value per feature.
+    """
+    try:
+        profile = InlierProfile(
+            quantile_low=torch.as_tensor(data["quantile_low"], dtype=torch.float32),
+            quantile_high=torch.as_tensor(data["quantile_high"], dtype=torch.float32),
+            onehot_groups={
+                str(name): tuple(int(i) for i in indices)
+                for name, indices in data["onehot_groups"].items()
+            },
+            group_modes={str(name): int(index) for name, index in data["group_modes"].items()},
+            numeric_indices=tuple(int(i) for i in data["numeric_indices"]),
+            feature_names=tuple(str(name) for name in data["feature_names"]),
+        )
+    except (KeyError, TypeError, ValueError, AttributeError) as exc:
+        raise RadonError(f"Malformed inlier profile: {exc!r}") from exc
+
+    width = len(profile.feature_names)
+    for name, quantiles in (("low", profile.quantile_low), ("high", profile.quantile_high)):
+        if tuple(quantiles.shape) != (width,):
+            raise RadonError(
+                f"Malformed inlier profile: {width} feature name(s) but quantile_{name} "
+                f"has shape {tuple(quantiles.shape)}."
+            )
+    return profile
+
+
+@torch.no_grad()
+def explain_record(
+    model: RadonAutoencoder,
+    record: Tensor,
+    profile: InlierProfile,
+    device: torch.device,
+    min_abs_delta: float = 1e-3,
+    min_clip_delta: float = 0.02,
+    top_k: int = 8,
+) -> SampleExplanation:
+    """Explain one record whose ground truth is unknown.
+
+    The same two ablations as :func:`explain_samples`, for a single record
+    instead of the extremes of a split.
+
+    Args:
+        model: The trained model.
+        record: Feature vector of shape ``(input_dim,)`` or ``(1, input_dim)``.
+        profile: The inlier baseline.
+        device: Device to run on.
+        min_abs_delta: Ignore attributions smaller than this.
+        min_clip_delta: Ignore numeric features whose clipped value barely
+            differs from the observed one.
+        top_k: How many attributions to keep per ranking.
+
+    Returns:
+        The explanation, with ``label`` set to ``None``.
+
+    Raises:
+        RadonError: If the record width does not match the profile.
+    """
+    features = record.reshape(1, -1).to(device).float()
+    if features.shape[1] != len(profile.feature_names):
+        raise RadonError(
+            f"explain_record: the record has {features.shape[1]} feature(s), the profile "
+            f"{len(profile.feature_names)}."
+        )
+
+    model.eval()
+    model.to(device)
+    criterion = nn.CosineSimilarity(dim=1, eps=1e-5)
+    reconstruction = model(features)
+    score = float((1.0 - criterion(reconstruction, features)).item())
+
+    return _explain_one(
+        model=model,
+        criterion=criterion,
+        tag="record",
+        score=score,
+        label=None,
+        features=features,
+        reconstruction=reconstruction,
+        profile=profile,
+        low=profile.quantile_low.to(device),
+        high=profile.quantile_high.to(device),
+        min_abs_delta=min_abs_delta,
+        min_clip_delta=min_clip_delta,
+        top_k=top_k,
     )
 
 
@@ -393,7 +519,7 @@ def _explain_one(
     criterion: nn.CosineSimilarity,
     tag: str,
     score: float,
-    label: int,
+    label: int | None,
     features: Tensor,
     reconstruction: Tensor,
     profile: InlierProfile,

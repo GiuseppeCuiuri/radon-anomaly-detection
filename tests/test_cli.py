@@ -11,6 +11,8 @@ torch = pytest.importorskip("torch")
 
 from radon.cli import explain as explain_cli  # noqa: E402
 from radon.cli import train as train_cli  # noqa: E402
+from radon.data import AnomalyDataset  # noqa: E402
+from radon.explain import profile_from_dict  # noqa: E402
 
 
 class TestLoggerNames:
@@ -72,3 +74,27 @@ class TestErrorHandling:
     def test_unknown_config_key_exits_nonzero(self, tmp_path, monkeypatch) -> None:
         monkeypatch.chdir(tmp_path)
         assert train_cli.main(["--set", "training.epocs=5"]) == 1
+
+
+class TestCheckpointProfile:
+    """The inference service explains records from the profile stored at training time."""
+
+    @staticmethod
+    def _dataset(feature_names: tuple[str, ...] | None) -> AnomalyDataset:
+        x = torch.rand(20, 3, generator=torch.Generator().manual_seed(0))
+        y = torch.zeros(20, dtype=torch.long)
+        y[:2] = 1
+        return AnomalyDataset(
+            name="toy", x_train=x, y_train=y, x_test=x, y_test=y, feature_names=feature_names
+        )
+
+    def test_tabular_dataset_stores_the_inlier_profile(self) -> None:
+        names = ("duration", "protocol_type_tcp", "protocol_type_udp")
+        extra = train_cli.inlier_profile_extra(self._dataset(names))
+
+        profile = profile_from_dict(extra["inlier_profile"])
+        assert profile.feature_names == names
+        assert profile.onehot_groups == {"protocol_type": (1, 2)}
+
+    def test_image_dataset_stores_nothing(self) -> None:
+        assert train_cli.inlier_profile_extra(self._dataset(None)) == {}

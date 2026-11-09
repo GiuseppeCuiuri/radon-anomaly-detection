@@ -1,8 +1,14 @@
-# CPU image for training and evaluating RADON.
+# CPU images for RADON.
 #
+# Training and evaluation (the default target):
 #   docker build -t radon:cpu .
 #   docker run --rm -v "$(pwd)/data:/app/data" -v "$(pwd)/outputs:/app/outputs" \
 #       radon:cpu --config configs/mnist.yaml
+#
+# Inference service:
+#   docker build --target service -t radon:service .
+#   docker run --rm -p 8000:8000 -v "$(pwd)/outputs:/app/outputs" \
+#       -e RADON_CHECKPOINT=outputs/checkpoints/radon_nsl_kdd_rep0.pth radon:service
 
 # --------------------------------------------------------------------------- #
 # Builder: a virtual environment with CPU PyTorch and the package.
@@ -24,12 +30,12 @@ COPY pyproject.toml README.md ./
 COPY src ./src
 # Editable on purpose: radon resolves configs/, data/ and outputs/ against the
 # directory above src/ (radon.config.PROJECT_ROOT), so the package has to stay in /app/src.
-RUN pip install -e .
+RUN pip install -e ".[service]"
 
 # --------------------------------------------------------------------------- #
-# Runtime: the virtual environment, the source and the configs, nothing else.
+# Runtime base: the virtual environment, the source and the configs, nothing else.
 # --------------------------------------------------------------------------- #
-FROM python:3.12-slim
+FROM python:3.12-slim AS runtime
 
 ENV PATH=/opt/venv/bin:$PATH \
     PYTHONUNBUFFERED=1 \
@@ -46,6 +52,19 @@ COPY configs ./configs
 RUN mkdir data outputs && chown radon:radon data outputs
 
 USER radon
+
+# --------------------------------------------------------------------------- #
+# Inference service: docker build --target service
+# --------------------------------------------------------------------------- #
+FROM runtime AS service
+
+EXPOSE 8000
+ENTRYPOINT ["uvicorn", "radon.service.app:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000"]
+
+# --------------------------------------------------------------------------- #
+# Training and evaluation: the default target, so it stays last.
+# --------------------------------------------------------------------------- #
+FROM runtime AS train
 
 ENTRYPOINT ["python", "-m", "radon.cli.train"]
 CMD ["--help"]
