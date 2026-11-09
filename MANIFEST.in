@@ -1,0 +1,3 @@
+# Ship the YAML configs with the source distribution: the README commands and
+# tests/test_config.py use them, and they are the base layer in a source tree.
+graft configs

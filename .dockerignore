@@ -2,6 +2,7 @@
 *
 !pyproject.toml
 !README.md
+!LICENSE
 !src/
 !configs/
 **/__pycache__/

@@ -53,8 +53,27 @@ __all__ = [
 
 T = TypeVar("T")
 
-#: Repository root, derived from this file's location (``src/radon/config.py``).
-PROJECT_ROOT: Path = Path(__file__).resolve().parents[2]
+
+def _project_root(config_file: Path = Path(__file__)) -> Path:
+    """Directory that relative paths and ``configs/default.yaml`` resolve against.
+
+    Args:
+        config_file: Location of this module; a parameter only so tests can
+            place it elsewhere.
+
+    Returns:
+        The repository root when running from a source checkout, recognised by
+        ``pyproject.toml`` next to ``src/``, so runs behave the same from any
+        working directory. Otherwise, as for a package installed with pip, the
+        current working directory: the directory above the package would be
+        inside the virtual environment.
+    """
+    checkout = config_file.resolve().parents[2]
+    return checkout if (checkout / "pyproject.toml").is_file() else Path.cwd()
+
+
+#: Root for relative paths: the repository in a checkout, else the working directory.
+PROJECT_ROOT: Path = _project_root()
 
 #: Base configuration layer, always loaded first when it exists.
 DEFAULT_CONFIG_PATH: Path = PROJECT_ROOT / "configs" / "default.yaml"
@@ -97,8 +116,9 @@ class LoggingConfig:
 class PathsConfig:
     """Filesystem locations for a run.
 
-    Relative paths are resolved against :data:`PROJECT_ROOT`, so a run behaves
-    identically regardless of the working directory it was launched from.
+    Relative paths are resolved against :data:`PROJECT_ROOT`: in a source
+    checkout a run behaves identically regardless of the working directory it
+    was launched from; an installed package uses the working directory.
 
     Attributes:
         data_dir: Root directory holding ``MNIST/`` and ``NSL_KDD/``.

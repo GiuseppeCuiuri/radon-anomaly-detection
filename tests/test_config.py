@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from radon.config import PROJECT_ROOT, Config, MnistConfig, load_config
+from radon.config import PROJECT_ROOT, Config, MnistConfig, _project_root, load_config
 from radon.exceptions import ConfigError
 
 
@@ -33,6 +33,24 @@ class TestDefaults:
         cfg = load_config(base_path=empty_base)
         assert cfg.paths.data_dir == (PROJECT_ROOT / "data").resolve()
         assert cfg.paths.checkpoint_dir == cfg.paths.output_dir / "checkpoints"
+
+    def test_project_root_is_the_checkout_in_a_source_tree(self) -> None:
+        assert (PROJECT_ROOT / "pyproject.toml").is_file()
+        assert (PROJECT_ROOT / "src" / "radon" / "config.py").is_file()
+
+    def test_installed_package_resolves_against_the_working_directory(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Installed with pip, config.py sits in site-packages, two levels below
+        # a directory of the virtual environment that holds no pyproject.toml.
+        installed = tmp_path / "venv" / "lib" / "site-packages" / "radon" / "config.py"
+        installed.parent.mkdir(parents=True)
+        installed.touch()
+        work = tmp_path / "work"
+        work.mkdir()
+        monkeypatch.chdir(work)
+
+        assert _project_root(installed) == work
 
     def test_absolute_paths_are_left_alone(self, empty_base: Path, tmp_path: Path) -> None:
         cfg = load_config(base_path=empty_base, overrides=[f"paths.data_dir={tmp_path.as_posix()}"])

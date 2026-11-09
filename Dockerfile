@@ -26,14 +26,14 @@ RUN pip install --upgrade pip setuptools wheel \
  && pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
 
 WORKDIR /app
-COPY pyproject.toml README.md ./
+COPY pyproject.toml README.md LICENSE ./
 COPY src ./src
-# Editable on purpose: radon resolves configs/, data/ and outputs/ against the
-# directory above src/ (radon.config.PROJECT_ROOT), so the package has to stay in /app/src.
-RUN pip install -e ".[service]"
+RUN pip install ".[service]"
 
 # --------------------------------------------------------------------------- #
-# Runtime base: the virtual environment, the source and the configs, nothing else.
+# Runtime base: the virtual environment and the configs, nothing else. The
+# installed package resolves configs/, data/ and outputs/ against the working
+# directory, /app.
 # --------------------------------------------------------------------------- #
 FROM python:3.12-slim AS runtime
 
@@ -45,7 +45,6 @@ RUN useradd --create-home --uid 1000 radon
 
 WORKDIR /app
 COPY --from=builder /opt/venv /opt/venv
-COPY --from=builder /app/src ./src
 COPY configs ./configs
 
 # Mount points for the datasets and for everything a run produces.
