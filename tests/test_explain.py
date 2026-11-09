@@ -77,6 +77,24 @@ class TestInlierProfile:
         assert profile.group_modes["protocol_type"] == 3  # tcp
         assert profile.group_modes["flag"] == 6  # SF
 
+    def test_short_names_strip_the_whole_group_prefix(self, training_data) -> None:
+        # "protocol_type" contains an underscore itself, so splitting at the first
+        # one used to display "type_udp".
+        x, y = training_data
+        profile = build_inlier_profile(x, y, FEATURE_NAMES)
+        assert profile.short_name(4) == "udp"
+        assert profile.short_name(7) == "S0"
+        assert profile.short_name(1) == "src_bytes"
+
+    def test_categorical_attribution_uses_short_names(self, training_data, model) -> None:
+        x, y = training_data
+        profile = build_inlier_profile(x, y, FEATURE_NAMES)
+        explanation = explain_record(model, x[-1], profile, DEVICE, min_abs_delta=0.0)
+
+        protocol = next(a for a in explanation.categorical if a.group == "protocol_type")
+        assert protocol.baseline == "tcp"
+        assert protocol.observed[0][0] == "icmp"
+
     def test_quantiles_come_from_inliers_only(self, training_data) -> None:
         x, y = training_data
         profile = build_inlier_profile(x, y, FEATURE_NAMES)
