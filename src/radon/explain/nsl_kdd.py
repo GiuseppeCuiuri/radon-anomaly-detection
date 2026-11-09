@@ -70,9 +70,17 @@ class InlierProfile:
     feature_names: tuple[str, ...]
 
     def short_name(self, index: int) -> str:
-        """Feature name with its group prefix stripped, for display."""
+        """Feature name with its categorical group prefix stripped, for display.
+
+        ``protocol_type_udp`` becomes ``udp``. The original split at the first
+        underscore, which turned it into ``type_udp`` because the group name
+        itself contains one. Names outside a categorical group are unchanged.
+        """
         name = self.feature_names[index]
-        return name.split("_", 1)[-1] if "_" in name else name
+        for group, indices in self.onehot_groups.items():
+            if index in indices:
+                return name.removeprefix(f"{group}_")
+        return name
 
 
 @dataclass(frozen=True)

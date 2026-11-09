@@ -13,12 +13,17 @@ Two protocols are implemented:
 - **NSL-KDD** — network intrusion detection, with outliers subsampled to a target contamination
   rate, plus feature attribution for the anomalies it flags.
 
+Also: [CI](.github/workflows/ci.yml) on Python 3.10–3.12 · [Docker images](#docker) ·
+an [HTTP inference service](#inference-service), documented in [docs/SERVICE.md](docs/SERVICE.md) ·
+[serving benchmarks](#serving-performance).
+
 ---
 
 ## Quick start
 
 ```bash
-python -m venv .venv && .venv\Scripts\activate
+python -m venv .venv
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
 python -m pip install --upgrade pip setuptools wheel
 pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
 pip install -e ".[dev]"
@@ -78,11 +83,12 @@ arguments the image prints the `radon-train` help. The container runs as an unpr
 
 ## Inference service
 
-An optional HTTP service that serves one trained checkpoint:
+An optional HTTP service that serves one trained checkpoint. [docs/SERVICE.md](docs/SERVICE.md)
+walks through training a small model, the requests and their responses, and the limits.
 
 ```bash
 pip install -e ".[service]"
-RADON_CHECKPOINT=outputs/checkpoints/radon_nsl_kdd_rep0.pth \
+RADON_CHECKPOINT=outputs/checkpoints/radon_mnist_rep0.pth \
     uvicorn radon.service.app:create_app --factory --port 8000
 ```
 
