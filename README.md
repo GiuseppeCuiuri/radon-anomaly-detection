@@ -112,6 +112,32 @@ docker run --rm -p 8000:8000 -v "$(pwd)/outputs:/app/outputs" \
     -e RADON_CHECKPOINT=outputs/checkpoints/radon_mnist_rep0.pth radon:service
 ```
 
+## Serving performance
+
+`POST /score` on the MNIST architecture (784 → 256 → 128), 200 timed requests per batch size
+after 20 warm-up requests. Intel Core i7-10750H, 6 torch threads, 15.8 GB RAM, no GPU; Windows 10,
+Python 3.12.7, torch 2.15.0+cpu; commit `9254efc`:
+
+| Batch | p50 ms | p95 ms | p99 ms | Records/s | Peak RSS MB |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 1 | 6.55 [6.48, 6.60] | 7.27 [7.04, 7.52] | 8.07 [7.45, 8.45] | 152 [151, 153] | 436 |
+| 8 | 9.12 [9.08, 9.16] | 9.66 [9.55, 9.73] | 9.89 [9.68, 10.20] | 879 [875, 883] | 576 |
+| 32 | 17.01 [16.95, 17.07] | 17.67 [17.52, 17.87] | 18.40 [17.79, 97.94] | 1869 [1849, 1881] | 728 |
+| 128 | 50.53 [50.14, 50.70] | 56.94 [56.68, 57.24] | 58.12 [57.16, 58.67] | 2496 [2477, 2513] | 1169 |
+
+Brackets are bootstrap 95% confidence intervals. The wide p99 interval at batch 32 comes from a
+single slow request. Peak RSS is the process peak after each batch size, so it accumulates.
+Raw data, table and figure are in [`benchmarks/results/`](benchmarks/results/). To reproduce:
+
+```bash
+python benchmarks/serving.py                  # about 30 s on the machine above
+python benchmarks/serving.py --report-only    # rebuild the table and figure from the CSV
+```
+
+These numbers come from one laptop, with synthetic requests sent in-process through FastAPI's
+test client, so they include JSON parsing, validation and inference but no HTTP server, no
+network and no concurrent clients.
+
 ## Configuration
 
 Three layers, each overriding the previous: `configs/default.yaml`, then a dataset file, then
